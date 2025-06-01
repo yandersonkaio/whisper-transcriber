@@ -175,53 +175,58 @@ namespace WhisperTranscriber
 
         private async void TranscribeButton_Click(object sender, RoutedEventArgs e)
         {
-            var audioPath = AudioPathTextBox.Text;
-            var ffmpegPath = FfmpegPathTextBox.Text;
-            var defaultModelType = "base";
-            var modelType = ModelTypeComboBox.SelectedItem?.ToString();
+            TranscriptionTextBox.Clear();
+            SaveTranscriptionButton.Visibility = Visibility.Collapsed;
+            TranscribeButton.IsEnabled = false;
 
-            if (!SetupFffmpeg(ffmpegPath)) return;
-
-            string tempWavPath = Path.Combine(Path.GetTempPath(), "temp_audio.wav");
-            if (!audioPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) || !IsValidWavFile(audioPath))
+            try
             {
-                try
+                var audioPath = AudioPathTextBox.Text;
+                var ffmpegPath = FfmpegPathTextBox.Text;
+                var modelType = ModelTypeComboBox.SelectedItem?.ToString() ?? "base";
+
+                if (!SetupFffmpeg(ffmpegPath)) return;
+
+                string tempWavPath = Path.Combine(Path.GetTempPath(), "temp_audio.wav");
+                if (!audioPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) || !IsValidWavFile(audioPath))
                 {
-                    Process process = new Process
+                    try
                     {
-                        StartInfo = new ProcessStartInfo
+                        Process process = new Process
                         {
-                            FileName = Path.Combine(ffmpegPath, "ffmpeg.exe"),
-                            Arguments = $"-i \"{audioPath}\" -acodec pcm_s16le -ar 16000 -ac 1 \"{tempWavPath}\" -y",
-                            RedirectStandardOutput = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        }
-                    };
-                    process.Start();
-                    await process.WaitForExitAsync();
-                    audioPath = tempWavPath;
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = Path.Combine(ffmpegPath, "ffmpeg.exe"),
+                                Arguments = $"-i \"{audioPath}\" -acodec pcm_s16le -ar 16000 -ac 1 \"{tempWavPath}\" -y",
+                                RedirectStandardOutput = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+                        process.Start();
+                        await process.WaitForExitAsync();
+                        audioPath = tempWavPath;
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Erro ao converter o áudio: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
                 }
-                catch (Exception ex)
+
+                var transcription = await TranscribeAudioAsync(audioPath, modelType);
+                if (!string.IsNullOrWhiteSpace(transcription))
                 {
-                    MessageBox.Show($"Erro ao converter o arquivo de áudio: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    TranscriptionTextBox.Text = transcription;
+                    SaveTranscriptionButton.Visibility = Visibility.Visible;
                 }
             }
-
-            var transcription = await TranscribeAudioAsync(audioPath, modelType ?? defaultModelType);
-
-            if (transcription != null)
+            finally
             {
-                TranscriptionTextBox.Text = transcription;
-                SaveTranscriptionButton.Visibility = Visibility.Visible;
-            }
-
-            if (File.Exists(tempWavPath))
-            {
-                File.Delete(tempWavPath);
+                TranscribeButton.IsEnabled = true;
             }
         }
+
 
         private bool IsValidWavFile(string filePath)
         {
