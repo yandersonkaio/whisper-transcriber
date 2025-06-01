@@ -5,8 +5,43 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WhisperTranscriber"
         mc:Ignorable="d"
-        Title="Whisper Transcriber" Height="600" Width="800">
-    <Grid Margin="10">
+        Title="Whisper Transcriber" Height="650" Width="900"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI"
+        Background="{StaticResource {x:Static SystemColors.ControlBrushKey}}">
+
+    <Window.Resources>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style TargetType="Label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="5,5,5,5"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Margin" Value="5,5,5,5"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="MinWidth" Value="80"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Height" Value="26"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="15">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -17,7 +52,7 @@
         </Grid.RowDefinitions>
 
         <!-- Configuração do FFmpeg -->
-        <GroupBox Grid.Row="0" Header="Configuração do FFmpeg" Margin="0,0,0,5">
+        <GroupBox Grid.Row="0" Header="Configuração do FFmpeg">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -25,14 +60,14 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Label Content="Caminho do FFmpeg:" VerticalAlignment="Center" Margin="5"/>
-                <TextBox Grid.Column="1" x:Name="FfmpegPathTextBox" VerticalAlignment="Center" Margin="5,0,5,0" Height="26"/>
-                <Button Grid.Column="2" Content="Procurar" x:Name="BrowseFfmpegButton" Width="80" Margin="5" Click="BrowseFfmpegButton_Click"/>
+                <Label Content="Caminho do FFmpeg:"/>
+                <TextBox Grid.Column="1" x:Name="FfmpegPathTextBox"/>
+                <Button Grid.Column="2" Content="Procurar" x:Name="BrowseFfmpegButton" Click="BrowseFfmpegButton_Click"/>
             </Grid>
         </GroupBox>
 
         <!-- Arquivo de Áudio -->
-        <GroupBox Grid.Row="1" Header="Arquivo de Áudio" Margin="0,0,0,5">
+        <GroupBox Grid.Row="1" Header="Arquivo de Áudio">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -40,22 +75,28 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Label Content="Arquivo de áudio:" VerticalAlignment="Center" Margin="5"/>
-                <TextBox Grid.Column="1" x:Name="AudioPathTextBox" VerticalAlignment="Center" Margin="5,0,5,0" Height="26"/>
-                <Button Grid.Column="2" Content="Procurar" x:Name="BrowseAudioButton" Width="80" Margin="5" Click="BrowseAudioButton_Click"/>
+                <Label Content="Arquivo de áudio:"/>
+                <TextBox Grid.Column="1" x:Name="AudioPathTextBox"/>
+                <Button Grid.Column="2" Content="Procurar" x:Name="BrowseAudioButton" Click="BrowseAudioButton_Click"/>
             </Grid>
         </GroupBox>
 
-        <!-- Modelo Whisper -->
-        <GroupBox Grid.Row="2" Header="Modelo Whisper" Margin="0,0,0,5">
+        <!-- Configurações de Transcrição -->
+        <GroupBox Grid.Row="2" Header="Configurações de Transcrição">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                <Label Content="Selecione o modelo:" VerticalAlignment="Center" Margin="5"/>
-                <ComboBox Grid.Column="1" x:Name="ModelTypeComboBox" Margin="5" SelectedIndex="1">
+                <Label Content="Modelo Whisper:" Grid.Row="0" Grid.Column="0"/>
+                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="ModelTypeComboBox" SelectedIndex="1">
                     <ComboBox.ItemsSource>
                         <x:Array Type="{x:Type sys:String}" xmlns:sys="clr-namespace:System;assembly=mscorlib">
                             <sys:String>tiny</sys:String>
@@ -66,34 +107,62 @@
                         </x:Array>
                     </ComboBox.ItemsSource>
                 </ComboBox>
+
+                <Label Content="Idioma (opcional):" Grid.Row="0" Grid.Column="2"/>
+                <ComboBox Grid.Row="0" Grid.Column="3" x:Name="LanguageComboBox" 
+                          IsEditable="false" Text="auto"
+                          ToolTip="Deixe como 'auto' para detecção automática de idioma">
+                </ComboBox>
             </Grid>
         </GroupBox>
 
         <!-- Botão de Transcrição -->
-        <Button Grid.Row="3" Content="Transcrever Áudio" x:Name="TranscribeButton" Margin="0,10" Height="30" Click="TranscribeButton_Click"/>
+        <Button Grid.Row="3" Content="Transcrever Áudio" x:Name="TranscribeButton" 
+                Height="35" FontWeight="Bold" Background="#FF0078D7" Foreground="White"
+                Click="TranscribeButton_Click"/>
 
-        <!-- Área da Transcrição e Botão Salvar -->
-        <StackPanel Grid.Row="4">
-            <TextBox x:Name="TranscriptionTextBox"
-                     Height="200"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"
-                     AcceptsReturn="True"
-                     IsReadOnly="True"
-                     Margin="0 0 0 10"/>
+        <!-- Área da Transcrição -->
+        <GroupBox Grid.Row="4" Header="Transcrição">
+            <DockPanel>
+                <TextBox x:Name="TranscriptionTextBox"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         FontFamily="Consolas"
+                         DockPanel.Dock="Top" Height="190"/>
 
-            <Button x:Name="SaveTranscriptionButton"
-                    Content="Salvar Transcrição"
-                    Width="150"
-                    HorizontalAlignment="Right"
-                    Visibility="Collapsed"
-                    Click="SaveTranscriptionButton_Click"/>
-        </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Height="34" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <Button x:Name="CopyTranscriptionButton"
+                            Content="Copiar"
+                            Width="100"
+                            Margin="0,5,5,0"
+                            Visibility="Collapsed"
+                            ToolTip="Copiar transcrição para área de transferência" Height="26"/>
+
+                    <Button x:Name="SaveTranscriptionButton"
+                            Content="Salvar como..."
+                            Width="100"
+                            Margin="5,5,0,0"
+                            Visibility="Collapsed"
+                            Click="SaveTranscriptionButton_Click" Height="26"/>
+                </StackPanel>
+            </DockPanel>
+        </GroupBox>
 
         <!-- Barra de Status -->
-        <StatusBar Grid.Row="5">
+        <StatusBar Grid.Row="5" Background="#FFF0F0F0">
             <StatusBarItem>
-                <TextBlock x:Name="StatusTextBlock" Text="Pronto"/>
+                <ProgressBar x:Name="ProgressBar" Width="150" Height="16" IsIndeterminate="False" Visibility="Collapsed"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="StatusTextBlock" Text="Pronto" Margin="5,0"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="TimeElapsedTextBlock" Text="" Margin="5,0"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>

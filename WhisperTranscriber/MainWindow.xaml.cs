@@ -5,14 +5,31 @@ using System.Net.Http;
 using System.Windows;
 using Whisper.net;
 using Whisper.net.Ggml;
+using System.Threading.Tasks;
+using System;
 
 namespace WhisperTranscriber
 {
     public partial class MainWindow : Window
     {
+        private Stopwatch transcriptionStopwatch;
+
         public MainWindow()
         {
             InitializeComponent();
+            InitializeLanguageComboBox();
+            transcriptionStopwatch = new Stopwatch();
+        }
+
+        private void InitializeLanguageComboBox()
+        {
+            var languages = new string[]
+            {
+                "auto", "pt", "en", "es", "fr", "de", "it", "ja", "zh", "ru"
+            };
+
+            LanguageComboBox.ItemsSource = languages;
+            LanguageComboBox.SelectedItem = "auto";
         }
 
         private void BrowseFfmpegButton_Click(object sender, RoutedEventArgs e)
@@ -36,7 +53,7 @@ namespace WhisperTranscriber
         {
             var dialog = new OpenFileDialog
             {
-                Filter = "Arquivos de áudio (*.mp3;*.wav;*.ogg;*.m4a)|*.mp3;*.wav;*.ogg;*.m4a|Todos os arquivos (*.*)|*.*",
+                Filter = "Arquivos de áudio (*.mp3;*.wav;*.ogg;*.m4a;*.flac)|*.mp3;*.wav;*.ogg;*.m4a;*.flac|Todos os arquivos (*.*)|*.*",
                 Title = "Selecione o arquivo de áudio"
             };
 
@@ -63,21 +80,40 @@ namespace WhisperTranscriber
                 if (!File.Exists(modelPath))
                 {
                     StatusTextBlock.Text = $"Baixando modelo {modelFile}...";
+                    ProgressBar.Visibility = Visibility.Visible;
+                    ProgressBar.IsIndeterminate = true;
+
                     using var httpClient = new HttpClient();
                     var downloader = new WhisperGgmlDownloader(httpClient);
-                    using var modelStream = await downloader.GetGgmlModelAsync(GgmlType.Base);
+
+                    var ggmlType = modelType switch
+                    {
+                        "tiny" => GgmlType.Tiny,
+                        "base" => GgmlType.Base,
+                        "small" => GgmlType.Small,
+                        "medium" => GgmlType.Medium,
+                        "large" => GgmlType.LargeV1,
+                        _ => GgmlType.Base
+                    };
+
+                    using var modelStream = await downloader.GetGgmlModelAsync(ggmlType);
                     using var fileWriter = File.OpenWrite(modelPath);
                     await modelStream.CopyToAsync(fileWriter);
+
+                    ProgressBar.IsIndeterminate = false;
+                    ProgressBar.Visibility = Visibility.Collapsed;
                     StatusTextBlock.Text = $"Modelo {modelFile} baixado com sucesso.";
                 }
             }
             catch (Exception ex)
             {
+                ProgressBar.IsIndeterminate = false;
+                ProgressBar.Visibility = Visibility.Collapsed;
                 MessageBox.Show($"Erro ao baixar o modelo: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private async Task<string> TranscribeAudioAsync(string audioPath, string modelType)
+        private async Task<string> TranscribeAudioAsync(string audioPath, string modelType, string language)
         {
             try
             {
@@ -99,39 +135,48 @@ namespace WhisperTranscriber
                 }
 
                 StatusTextBlock.Text = $"Carregando modelo {modelFile}...";
+                ProgressBar.Visibility = Visibility.Visible;
+                ProgressBar.IsIndeterminate = true;
 
                 using var whisperFactory = WhisperFactory.FromPath(modelPath);
                 using var processor = whisperFactory.CreateBuilder()
-                    .WithLanguage("auto") // "pt"
+                    .WithLanguage(language)
                     .Build();
 
                 using var audioStream = File.OpenRead(audioPath);
 
                 StatusTextBlock.Text = "Iniciando transcrição...";
+                ProgressBar.IsIndeterminate = false;
 
                 var segments = new List<string>();
+                transcriptionStopwatch.Restart();
 
                 await foreach (var segment in processor.ProcessAsync(audioStream))
                 {
                     segments.Add(segment.Text);
+                    TimeElapsedTextBlock.Text = $"Tempo decorrido: {transcriptionStopwatch.Elapsed:mm\\:ss}";
                 }
 
+                transcriptionStopwatch.Stop();
+                ProgressBar.Visibility = Visibility.Collapsed;
                 StatusTextBlock.Text = "Transcrição concluída.";
+                TimeElapsedTextBlock.Text = $"Concluído em: {transcriptionStopwatch.Elapsed:mm\\:ss}";
+
                 return string.Join("\n", segments);
             }
             catch (Exception ex)
             {
+                ProgressBar.Visibility = Visibility.Collapsed;
                 MessageBox.Show($"Erro durante a transcrição: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
                 return null;
             }
         }
 
-
         private void SaveTranscriptionButton_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new SaveFileDialog
             {
-                Filter = "Arquivos de texto (*.txt)|*.txt|Todos os arquivos (*.*)|*.*",
+                Filter = "Arquivos de texto (*.txt)|*.txt|Documentos Word (*.docx)|*.docx|Todos os arquivos (*.*)|*.*",
                 DefaultExt = ".txt",
                 Title = "Salvar transcrição como"
             };
@@ -141,7 +186,7 @@ namespace WhisperTranscriber
                 try
                 {
                     File.WriteAllText(dialog.FileName, TranscriptionTextBox.Text);
-                    MessageBox.Show("Transcrição salva com sucesso!", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
+                    StatusTextBlock.Text = "Transcrição salva com sucesso!";
                 }
                 catch (Exception ex)
                 {
@@ -150,7 +195,16 @@ namespace WhisperTranscriber
             }
         }
 
-        private bool SetupFffmpeg(string ffmpegPath)
+        private void CopyTranscriptionButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(TranscriptionTextBox.Text))
+            {
+                Clipboard.SetText(TranscriptionTextBox.Text);
+                StatusTextBlock.Text = "Transcrição copiada para área de transferência!";
+            }
+        }
+
+        private bool SetupFfmpeg(string ffmpegPath)
         {
             try
             {
@@ -160,9 +214,19 @@ namespace WhisperTranscriber
                     return false;
                 }
 
+                var ffmpegExePath = Path.Combine(ffmpegPath, "ffmpeg.exe");
+                if (!File.Exists(ffmpegExePath))
+                {
+                    MessageBox.Show($"Arquivo ffmpeg.exe não encontrado em: {ffmpegPath}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return false;
+                }
+
                 var path = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Process);
-                path += ";" + ffmpegPath;
-                Environment.SetEnvironmentVariable("PATH", path, EnvironmentVariableTarget.Process);
+                if (!path.Contains(ffmpegPath))
+                {
+                    path += ";" + ffmpegPath;
+                    Environment.SetEnvironmentVariable("PATH", path, EnvironmentVariableTarget.Process);
+                }
 
                 return true;
             }
@@ -178,33 +242,54 @@ namespace WhisperTranscriber
             TranscriptionTextBox.Clear();
             SaveTranscriptionButton.Visibility = Visibility.Collapsed;
             TranscribeButton.IsEnabled = false;
+            CopyTranscriptionButton.IsEnabled = false;
 
             try
             {
                 var audioPath = AudioPathTextBox.Text;
                 var ffmpegPath = FfmpegPathTextBox.Text;
                 var modelType = ModelTypeComboBox.SelectedItem?.ToString() ?? "base";
+                var language = LanguageComboBox.SelectedItem?.ToString() ?? "auto";
 
-                if (!SetupFffmpeg(ffmpegPath)) return;
+                if (string.IsNullOrWhiteSpace(audioPath))
+                {
+                    MessageBox.Show("Selecione um arquivo de áudio primeiro", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
 
-                string tempWavPath = Path.Combine(Path.GetTempPath(), "temp_audio.wav");
+                if (!SetupFfmpeg(ffmpegPath)) return;
+
+                string tempWavPath = Path.Combine(Path.GetTempPath(), $"temp_audio_{Guid.NewGuid()}.wav");
                 if (!audioPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) || !IsValidWavFile(audioPath))
                 {
                     try
                     {
+                        StatusTextBlock.Text = "Convertendo áudio para formato WAV...";
+                        ProgressBar.Visibility = Visibility.Visible;
+                        ProgressBar.IsIndeterminate = true;
+
                         Process process = new Process
                         {
                             StartInfo = new ProcessStartInfo
                             {
                                 FileName = Path.Combine(ffmpegPath, "ffmpeg.exe"),
-                                Arguments = $"-i \"{audioPath}\" -acodec pcm_s16le -ar 16000 -ac 1 \"{tempWavPath}\" -y",
+                                Arguments = $"-i \"{audioPath}\" -acodec pcm_s16le -ar 16000 -ac 1 \"{tempWavPath}\" -y -hide_banner -loglevel error",
                                 RedirectStandardOutput = true,
+                                RedirectStandardError = true,
                                 UseShellExecute = false,
                                 CreateNoWindow = true
                             }
                         };
+
                         process.Start();
                         await process.WaitForExitAsync();
+
+                        if (process.ExitCode != 0)
+                        {
+                            var error = await process.StandardError.ReadToEndAsync();
+                            throw new Exception($"FFmpeg error: {error}");
+                        }
+
                         audioPath = tempWavPath;
                     }
                     catch (Exception ex)
@@ -212,21 +297,37 @@ namespace WhisperTranscriber
                         MessageBox.Show($"Erro ao converter o áudio: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
+                    finally
+                    {
+                        ProgressBar.Visibility = Visibility.Collapsed;
+                    }
                 }
 
-                var transcription = await TranscribeAudioAsync(audioPath, modelType);
+                var transcription = await TranscribeAudioAsync(audioPath, modelType, language);
                 if (!string.IsNullOrWhiteSpace(transcription))
                 {
                     TranscriptionTextBox.Text = transcription;
                     SaveTranscriptionButton.Visibility = Visibility.Visible;
+                    CopyTranscriptionButton.Visibility = Visibility.Visible;
+                    CopyTranscriptionButton.IsEnabled = true;
                 }
             }
             finally
             {
                 TranscribeButton.IsEnabled = true;
+                ProgressBar.Visibility = Visibility.Collapsed;
+
+                try
+                {
+                    var tempFiles = Directory.GetFiles(Path.GetTempPath(), "temp_audio_*.wav");
+                    foreach (var file in tempFiles)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch { }
             }
         }
-
 
         private bool IsValidWavFile(string filePath)
         {
@@ -244,6 +345,5 @@ namespace WhisperTranscriber
                 return false;
             }
         }
-
     }
 }
